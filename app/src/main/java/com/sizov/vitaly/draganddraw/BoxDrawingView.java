@@ -31,7 +31,7 @@ public class BoxDrawingView extends View {
     public BoxDrawingView(Context context, AttributeSet attrs) {
         super(context, attrs);
 
-        // Треугольники рисуются полупрозрачными красным цветом (ARGB)
+        // Прямоугольники рисуются полупрозрачными красным цветом (ARGB)
         mBoxPaint = new Paint();
         mBoxPaint.setColor(0x22ff0000);
 
@@ -50,8 +50,29 @@ public class BoxDrawingView extends View {
             float right = Math.max(box.getOrigin().x, box.getCurrent().x);
             float top = Math.min(box.getOrigin().y, box.getCurrent().y);
             float bottom = Math.max(box.getOrigin().y, box.getCurrent().y);
+
+
+            // Расчет центра прямоугольника
+            float px = (box.getCurrent().x + box.getOrigin().x) / 2;
+            float py = (box.getCurrent().y + box.getOrigin().y) / 2;
+
+            canvas.rotate(box.getAngle(), px, py);
             canvas.drawRect(left, right, top, bottom, mBoxPaint);
+            canvas.rotate(-1 * box.getAngle(), px, py);
         }
+    }
+
+    // Угол между вертикальным сегментом от центральной точки и сегментом от центра
+    public float calcAngle(PointF center, PointF target) {
+        float angle = (float) Math.atan2(target.y - center.y, target.x - center.x );
+        angle += Math.PI/2.0;
+        // Перевод в градусы
+        angle = (float) Math.toDegrees(angle);
+
+        if (angle < 0 ) {
+            angle += 360;
+        }
+        return angle;
     }
 
     // Используется при заполнении представления по разметке XML
@@ -65,23 +86,48 @@ public class BoxDrawingView extends View {
         PointF current = new PointF(event.getX(), event.getY());
         String action = "";
 
-        switch (event.getAction()) {
+        switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 action = "ACTION_DOWN";
-                // Сброс текущего состояния
+                // Новый прямоугольник
                 mCurrentBox = new Box(current);
+                mCurrentBox.setFirstId(event.getPointerId(0));
                 mBoxen.add(mCurrentBox);
                 break;
+            case MotionEvent.ACTION_POINTER_DOWN:
+                if ((event.getPointerCount() >= 2) && (mCurrentBox != null)) {
+                    // Второй палец
+                    PointF current2 = new PointF(event.getX(1), event.getY(1));
+                    mCurrentBox.setOrigin2(current2);
+                    mCurrentBox.setSecondId(event.getPointerId(1));
+                    break;
+                }
             case MotionEvent.ACTION_MOVE:
                 action = "ACTION_MOVE";
-                if (mCurrentBox != null) {
+                if ((mCurrentBox != null) && (mCurrentBox.getFirstId() == event.getPointerId(0))) {
                     mCurrentBox.setCurrent(current);
+                    // Второй палец
+                    if (event.getPointerCount() >= 2) {
+                        if (mCurrentBox.getSecondId() == event.getPointerId(1)) {
+                            PointF current2 = new PointF(event.getX(1), event.getY(1));
+                            mCurrentBox.setCurrent2(current2);
+                            // Расчет угла
+                            mCurrentBox.setAngle(calcAngle(mCurrentBox.getOrigin2(),
+                                    mCurrentBox.getCurrent2()));
+                        }
+                    }
                     invalidate();
                 }
                 break;
             case MotionEvent.ACTION_UP:
                 action = "ACTION_UP";
                 mCurrentBox = null;
+                break;
+            case MotionEvent.ACTION_POINTER_UP:
+                action = "ACTION_POINTER_UP";
+                if (mCurrentBox != null) {
+                    Log.i(TAG, "Angle = " + mCurrentBox.getAngle());
+                }
                 break;
             case MotionEvent.ACTION_CANCEL:
                 action = "ACTION_CANCEL";
